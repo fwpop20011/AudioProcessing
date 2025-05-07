@@ -130,6 +130,19 @@ def spectral_flux(spec):
 
     return normalize(flux)
 
+def high_frequency_content(mag_spec):
+    """
+    Calculate high frequency content
+    """
+    freq_weights = np.arange(mag_spec.shape[0])
+    hfc = np.zeros(mag_spec.shape[1])
+
+    for frame in range(mag_spec.shape[1]):
+        hfc[frame] = np.sum(mag_spec[:, frame] * freq_weights)
+    return normalize(hfc)
+
+
+
 def onset_detection_function(sample_rate, signal, fps, spect, magspect,
                              melspect, options):
     """
@@ -148,7 +161,8 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
         print("no mel spect")
 
     if magspect is not None:
-        odfs['flux_mel'] = spectral_flux(magspect)
+        odfs['flux_mag'] = spectral_flux(magspect)
+        odfs['hfc'] = high_frequency_content(magspect)
     else:
         print("no mag spect")
 
@@ -156,8 +170,9 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     min_length = min(len(odf) for odf in odfs.values())
 
     weights = {
-        'flux_mel': 0.7,  # Mel-based spectral flux
+        'flux_mel': 0.1,  # Mel-based spectral flux
         'flux_mag': 0.3,  # Mag-based spectral flux
+        'hfc': 0.5, # High-frequency content
     }
 
     available_weights = {k: weights[k] for k in odfs.keys()}
