@@ -9,7 +9,6 @@ For usage information, call with --help.
 Author: Jan Schlüter
 """
 
-import sys
 from pathlib import Path
 from argparse import ArgumentParser
 import json
@@ -144,14 +143,21 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
 
     #spectral flux
     if melspect is not None:
-        spec = melspect
-        odfs['flux_mel'] = spectral_flux(spec)
+        odfs['flux_mel'] = spectral_flux(melspect)
+    else:
+        print("no mel spect")
+
+    if magspect is not None:
+        odfs['flux_mel'] = spectral_flux(magspect)
+    else:
+        print("no mag spect")
 
 
     min_length = min(len(odf) for odf in odfs.values())
 
     weights = {
-        'flux_mel': 1,  # Mel-based spectral flux
+        'flux_mel': 0.7,  # Mel-based spectral flux
+        'flux_mag': 0.3,  # Mag-based spectral flux
     }
 
     available_weights = {k: weights[k] for k in odfs.keys()}
@@ -172,9 +178,9 @@ def detect_onsets(odf_rate, odf, options):
     Detect onsets in the onset detection function.
     Returns the positions in seconds.
     """
-    window_size = int(odf_rate * 0.3)  # window for local average
-    threshold_multiplier = 0.2  # Threshold above local average
-    min_time_between_onsets = 0.05  # 50ms minimum between consecutive onsets
+    window_size = int(odf_rate * 0.35)  # window for local average
+    threshold_multiplier = 0.4  # Threshold above local average
+    min_time_between_onsets = 0.08  # 80 ms minimum between consecutive onsets
     min_distance_samples = int(odf_rate * min_time_between_onsets)
 
     # adaptive threshold using moving average
@@ -184,7 +190,7 @@ def detect_onsets(odf_rate, odf, options):
         end = min(len(odf), i + window_size // 2 + 1)
         local_avg[i] = np.mean(odf[start:end])
 
-    # adaptive threshold = local average + constant
+    # adaptive threshold = local average and constant
     adaptive_threshold = local_avg * threshold_multiplier + 0.03
 
     # Find peaks that are above the threshold
@@ -241,7 +247,7 @@ def main():
     parser = opts_parser()
     options = parser.parse_args()
 
-    # iterate over input directory
+    # iterate over the input directory
     indir = Path(options.indir)
     infiles = list(indir.glob('*.wav'))
     if tqdm is not None:
