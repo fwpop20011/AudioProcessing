@@ -140,14 +140,31 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     """
 
     #TODO for ONSETS
+    odfs = {}
+
     #spectral flux
+    if melspect is not None:
+        spec = melspect
+        odfs['flux_mel'] = spectral_flux(spec)
 
-    spec = melspect
 
-    flux = spectral_flux(spec)
+    min_length = min(len(odf) for odf in odfs.values())
 
+    weights = {
+        'flux_mel': 1,  # Mel-based spectral flux
+    }
 
-    return flux, fps
+    available_weights = {k: weights[k] for k in odfs.keys()}
+    total_weight = sum(available_weights.values())
+
+    normalized_weights = {k: v / total_weight for k, v in available_weights.items()}
+
+    # Combine available ODFs
+    combined = np.zeros(min_length)
+    for name, odf in odfs.items():
+        combined += normalized_weights[name] * odf
+
+    return combined, fps
 
 
 def detect_onsets(odf_rate, odf, options):
@@ -155,7 +172,6 @@ def detect_onsets(odf_rate, odf, options):
     Detect onsets in the onset detection function.
     Returns the positions in seconds.
     """
-    # TODO for ONSETS
     window_size = int(odf_rate * 0.3)  # window for local average
     threshold_multiplier = 0.2  # Threshold above local average
     min_time_between_onsets = 0.05  # 50ms minimum between consecutive onsets
