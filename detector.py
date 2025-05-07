@@ -113,6 +113,24 @@ def detect_everything(filename, options):
             'tempo': list(np.round(tempo, 2))}
 
 
+def normalize(array):
+    """Normalize array to range [0,1]"""
+    if len(array) == 0 or np.max(array) == np.min(array):
+        return array
+    return (array - np.min(array)) / (np.max(array) - np.min(array))
+
+
+def spectral_flux(spec):
+    """
+    Calculate spectral flux with half-wave rectification
+    """
+    flux = np.zeros(spec.shape[1])
+    for frame in range(1, spec.shape[1]):
+        diff = spec[:, frame] - spec[:, frame - 1]
+        flux[frame] = np.sum(diff * (diff > 0))
+
+    return normalize(flux)
+
 def onset_detection_function(sample_rate, signal, fps, spect, magspect,
                              melspect, options):
     """
@@ -120,13 +138,16 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     where the onsets are. Returns the function values and its sample/frame
     rate in values per second as a tuple: (values, values_per_second)
     """
-    # we only have a dumb dummy implementation here.
-    # it returns every 1000th absolute sample value of the input signal.
-    # this is not a useful solution at all, just a placeholder.
+
     #TODO for ONSETS
-    values = np.abs(signal[::1000])
-    values_per_second = sample_rate / 1000
-    return values, values_per_second
+    #spectral flux
+
+    spec = melspect
+
+    flux = spectral_flux(spec)
+
+
+    return flux, fps
 
 
 def detect_onsets(odf_rate, odf, options):
@@ -134,13 +155,41 @@ def detect_onsets(odf_rate, odf, options):
     Detect onsets in the onset detection function.
     Returns the positions in seconds.
     """
-    # we only have a dumb dummy implementation here.
-    # it returns the timestamps of the 100 strongest values.
-    # this is not a useful solution at all, just a placeholder.
     # TODO for ONSETS
-    strongest_indices = np.argpartition(odf, 100)[:100]
-    strongest_indices.sort()
-    return strongest_indices / odf_rate
+    window_size = int(odf_rate * 0.3)  # window for local average
+    threshold_multiplier = 0.2  # Threshold above local average
+    min_time_between_onsets = 0.05  # 50ms minimum between consecutive onsets
+    min_distance_samples = int(odf_rate * min_time_between_onsets)
+
+    # adaptive threshold using moving average
+    local_avg = np.zeros_like(odf)
+    for i in range(len(odf)):
+        start = max(0, i - window_size // 2)
+        end = min(len(odf), i + window_size // 2 + 1)
+        local_avg[i] = np.mean(odf[start:end])
+
+    # adaptive threshold = local average + constant
+    adaptive_threshold = local_avg * threshold_multiplier + 0.03
+
+    # Find peaks that are above the threshold
+    peaks = []
+    for i in range(1, len(odf) - 1):
+        if (odf[i] > odf[i - 1] and odf[i] > odf[i + 1] and
+                odf[i] > adaptive_threshold[i]):
+            peaks.append(i)
+
+    # Apply minimum distance constraint
+    if len(peaks) > 0:
+        filtered_peaks = [peaks[0]]
+        for peak in peaks[1:]:
+            if peak - filtered_peaks[-1] >= min_distance_samples:
+                filtered_peaks.append(peak)
+        peaks = filtered_peaks
+
+    # Convert peak indices to time in seconds
+    onset_times = np.array(peaks) / odf_rate
+
+    return onset_times
 
 
 def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,
