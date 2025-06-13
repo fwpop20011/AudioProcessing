@@ -195,10 +195,10 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
 
     weights = {
         'flux_mel': 0.3,  # Mel-based spectral flux
-        'flux_mag': 0.3,  # Mag-based spectral flux
+        'flux_mag': 0.5,  # Mag-based spectral flux
         'hfc': 0.3, # High-frequency content
         'phase_dev': 0.3, # Percussive deviation
-        'percussive_flux': 0.2 # Percussive component flux
+        'percussive_flux': 0.5 # Percussive component flux
     }
 
     available_weights = {k: weights[k] for k in odfs.keys()}
@@ -298,15 +298,15 @@ def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,
 
     if tempo_from_onsets is not None:
         weighted_tempos.extend(tempo_from_onsets)
-        weights.extend([0.5] * len(tempo_from_onsets))  # 40% weight for onset-based
+        weights.extend([0.8] * len(tempo_from_onsets))  # 40% weight for onset-based
 
     if tempo_from_autocorr is not None:
         weighted_tempos.extend(tempo_from_autocorr)
-        weights.extend([0.35] * len(tempo_from_autocorr))  # 35% weight for autocorr
+        weights.extend([0.1] * len(tempo_from_autocorr))  # 35% weight for autocorr
 
     if tempo_from_histogram is not None:
         weighted_tempos.extend(tempo_from_histogram)
-        weights.extend([0.15] * len(tempo_from_histogram))  # 25% weight for histogram
+        weights.extend([0.1] * len(tempo_from_histogram))  # 25% weight for histogram
 
     # Example: weighted_tempos = [125.3, 124.8, 126.1], weights = [0.4, 0.35, 0.25]
     # Weighted average: (125.3*0.4 + 124.8*0.35 + 126.1*0.25) = 125.225
@@ -489,7 +489,7 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
         t += beat_interval
 
     beat_times = []
-    search_window = 0.07
+    search_window = 0.2
 
     for raw_beat in raw_beats:
         center = int(raw_beat*odf_rate)
