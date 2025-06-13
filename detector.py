@@ -141,7 +141,20 @@ def high_frequency_content(mag_spec):
         hfc[frame] = np.sum(mag_spec[:, frame] * freq_weights)
     return normalize(hfc)
 
+def phase_deviation(spect):
+    """
+    Calculate onset deviation onset detection function
+    """
+    phase = np.angle(spect)
+    phase_diff = np.zeros(spect.shape[1])
+    for frame in range(2, phase.shape[1]):
+        diff1 = np.unwrap(phase[:, frame]) - np.unwrap(phase[:, frame - 1])
+        diff2 = np.unwrap(phase[:, frame - 1]) - np.unwrap(phase[:, frame - 2])
 
+        deviation = np.abs(diff1 - diff2)
+
+        phase_diff[frame] = np.sum(deviation)
+    return normalize(phase_diff)
 
 def onset_detection_function(sample_rate, signal, fps, spect, magspect,
                              melspect, options):
@@ -150,8 +163,6 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     where the onsets are. Returns the function values and its sample/frame
     rate in values per second as a tuple: (values, values_per_second)
     """
-
-    #TODO for ONSETS
     odfs = {}
 
     #spectral flux
@@ -163,16 +174,21 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
     if magspect is not None:
         odfs['flux_mag'] = spectral_flux(magspect)
         odfs['hfc'] = high_frequency_content(magspect)
+
+        #phase deviation detection
+        if spect is not None:
+            odfs['phase_dev'] = phase_deviation(spect)
+
     else:
         print("no mag spect")
-
 
     min_length = min(len(odf) for odf in odfs.values())
 
     weights = {
-        'flux_mel': 0.1,  # Mel-based spectral flux
+        'flux_mel': 0.3,  # Mel-based spectral flux
         'flux_mag': 0.3,  # Mag-based spectral flux
-        'hfc': 0.5, # High-frequency content
+        'hfc': 0.3, # High-frequency content
+        'phase_dev': 0.3 # Percussive component flux
     }
 
     available_weights = {k: weights[k] for k in odfs.keys()}
@@ -194,7 +210,7 @@ def detect_onsets(odf_rate, odf, options):
     Returns the positions in seconds.
     """
     window_size = int(odf_rate * 0.35)  # window for local average
-    threshold_multiplier = 0.4  # Threshold above local average
+    threshold_multiplier = 0.8  # Threshold above local average
     min_time_between_onsets = 0.08  # 80 ms minimum between consecutive onsets
     min_distance_samples = int(odf_rate * min_time_between_onsets)
 
