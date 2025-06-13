@@ -1,7 +1,8 @@
-/train
+/train/*
+/test/*
 /train_extra_onsets
 /train_extra_tempobeats
-/test
 test.json
 train.json
-train.json
+/audio/
+/__pycache__

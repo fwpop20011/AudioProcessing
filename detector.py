@@ -248,16 +248,209 @@ def detect_onsets(odf_rate, odf, options):
 def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,
                  odf_rate, odf, onsets, options):
     """
-    Detect tempo using any of the input representations.
-    Returns one tempo or two tempo estimations.
-    """    
-    # we only have a dumb dummy implementation here.
-    # it uses the time difference between the first two onsets to
-    # define the tempo, and returns half of that as a second guess.
-    # this is not a useful solution at all, just a placeholder.
-    # TODO for tempo
-    tempo = 60 / (onsets[1] - onsets[0])
-    return [tempo / 2, tempo]
+    Detect tempo using onset detection function and spectral analysis.
+    Returns one or two tempo estimations (in BPM).
+    """
+
+    # Method 1: Onset-based tempo estimation
+    tempo_from_onsets = estimate_tempo_from_onsets(onsets)
+
+    # Method 2: Autocorrelation-based tempo estimation
+    tempo_from_autocorr = estimate_tempo_from_autocorrelation(odf, odf_rate)
+
+    # Method 3: Beat histogram approach
+    tempo_from_histogram = estimate_tempo_from_beat_histogram(odf, odf_rate)
+
+    # Combine estimates (you can experiment with different weighting)
+    candidate_tempos = []
+
+    # Example values that each method might return:
+    # tempo_from_onsets = [125.3]          # e.g., from inter-onset intervals
+    # tempo_from_autocorr = [124.8]        # e.g., from autocorrelation peak
+    # tempo_from_histogram = [126.1]       # e.g., from beat histogram
+
+    if tempo_from_onsets is not None:
+        candidate_tempos.extend(tempo_from_onsets)
+        # candidate_tempos = [125.3]
+
+    if tempo_from_autocorr is not None:
+        candidate_tempos.extend(tempo_from_autocorr)
+        # candidate_tempos = [125.3, 124.8]
+
+    if tempo_from_histogram is not None:
+        candidate_tempos.extend(tempo_from_histogram)
+        # candidate_tempos = [125.3, 124.8, 126.1]
+
+    # Alternative: Weighted combination approach
+    # You could also weight the estimates based on confidence:
+    weighted_tempos = []
+    weights = []
+
+    if tempo_from_onsets is not None:
+        weighted_tempos.extend(tempo_from_onsets)
+        weights.extend([0.5] * len(tempo_from_onsets))  # 40% weight for onset-based
+
+    if tempo_from_autocorr is not None:
+        weighted_tempos.extend(tempo_from_autocorr)
+        weights.extend([0.35] * len(tempo_from_autocorr))  # 35% weight for autocorr
+
+    if tempo_from_histogram is not None:
+        weighted_tempos.extend(tempo_from_histogram)
+        weights.extend([0.15] * len(tempo_from_histogram))  # 25% weight for histogram
+
+    # Example: weighted_tempos = [125.3, 124.8, 126.1], weights = [0.4, 0.35, 0.25]
+    # Weighted average: (125.3*0.4 + 124.8*0.35 + 126.1*0.25) = 125.225
+
+    if weighted_tempos:
+        weighted_avg = np.average(weighted_tempos, weights=weights)
+        candidate_tempos.append(weighted_avg)
+        # candidate_tempos = [125.3, 124.8, 126.1, 125.225]
+
+    # Filter reasonable tempo range (typical music: 60-200 BPM)
+    candidate_tempos = [t for t in candidate_tempos if 60 <= t <= 200]
+    # Example after filtering: [125.3, 124.8, 126.1, 125.225] (all in valid range)
+
+    if len(candidate_tempos) == 0:
+        # Fallback to a reasonable default
+        return [120]  # 120 BPM is a common tempo
+
+    # Sort and pick most likely candidates
+    candidate_tempos = sorted(candidate_tempos)
+    # Example sorted: [124.8, 125.225, 125.3, 126.1]
+
+    # Method 1: Use median as primary tempo
+    primary_tempo = candidate_tempos[len(candidate_tempos) // 2]  # median
+    # Example: primary_tempo = 125.225 (index 1 for 4 items)
+
+    # Method 2: Alternative - use weighted average or most confident estimate
+    # primary_tempo = weighted_avg  # Use the weighted average calculated above
+    # Example: primary_tempo = 125.225
+
+    # Method 3: Alternative - cluster similar tempos and pick strongest cluster
+    # You could group tempos within ±3 BPM and pick the largest cluster
+
+    # Common alternative: half or double tempo (handles tempo ambiguity)
+    if primary_tempo > 120:
+        secondary_tempo = primary_tempo / 2  # Example: 125.225 / 2 = 62.6
+    else:
+        secondary_tempo = primary_tempo * 2  # Example: if primary was 80, secondary = 160
+
+    # Example with our values: primary_tempo = 125.225, secondary_tempo = 62.6
+
+    # Ensure secondary tempo is in reasonable range
+    if 60 <= secondary_tempo <= 200:
+        return [primary_tempo, secondary_tempo]  # Example: [125.225, 62.6] -> [125.23, 62.61] after rounding
+    else:
+        return [primary_tempo]  # Example: [125.23] if secondary was out of range
+
+
+def estimate_tempo_from_onsets(onsets):
+    """
+    Estimate tempo from inter-onset intervals.
+    """
+    if len(onsets) < 3:
+        return None
+
+    # Calculate inter-onset intervals
+    intervals = np.diff(onsets)
+
+    # Remove outliers (very short or very long intervals)
+    intervals = intervals[(intervals > 0.2) & (intervals < 2.0)]
+
+    if len(intervals) == 0:
+        return None
+
+    # Convert intervals to BPM
+    tempos = 60.0 / intervals
+
+    # Find most common tempo using histogram
+    hist, bin_edges = np.histogram(tempos, bins=50, range=(60, 200))
+    most_common_idx = np.argmax(hist)
+    primary_tempo = (bin_edges[most_common_idx] + bin_edges[most_common_idx + 1]) / 2
+
+    return [primary_tempo]
+
+
+def estimate_tempo_from_autocorrelation(odf, odf_rate):
+    """
+    Estimate tempo using autocorrelation of the onset detection function.
+    """
+    # Calculate autocorrelation
+    autocorr = np.correlate(odf, odf, mode='full')
+    autocorr = autocorr[len(autocorr) // 2:]  # Keep only positive lags
+
+    # Convert lag indices to time (seconds)
+    lags_seconds = np.arange(len(autocorr)) / odf_rate
+
+    # Focus on reasonable tempo range (0.3 to 1.0 seconds = 60-200 BPM)
+    min_lag = int(0.3 * odf_rate)  # 200 BPM
+    max_lag = int(1.0 * odf_rate)  # 60 BPM
+
+    if max_lag >= len(autocorr):
+        return None
+
+    # Find peaks in autocorrelation within tempo range
+    autocorr_segment = autocorr[min_lag:max_lag]
+    lags_segment = lags_seconds[min_lag:max_lag]
+
+    # Find local maxima
+    peaks = []
+    for i in range(1, len(autocorr_segment) - 1):
+        if (autocorr_segment[i] > autocorr_segment[i - 1] and
+                autocorr_segment[i] > autocorr_segment[i + 1]):
+            peaks.append((lags_segment[i], autocorr_segment[i]))
+
+    if not peaks:
+        return None
+
+    # Sort by autocorrelation strength
+    peaks.sort(key=lambda x: x[1], reverse=True)
+
+    # Convert best lag to tempo
+    best_lag = peaks[0][0]
+    tempo = 60.0 / best_lag
+
+    return [tempo]
+
+
+def estimate_tempo_from_beat_histogram(odf, odf_rate):
+    """
+    Estimate tempo using beat histogram approach.
+    """
+    # This is a simplified version - you might want to implement
+    # a more sophisticated beat tracking algorithm
+
+    # Find local maxima in ODF (potential beat positions)
+    peaks = []
+    for i in range(1, len(odf) - 1):
+        if odf[i] > odf[i - 1] and odf[i] > odf[i + 1] and odf[i] > 0.1:
+            peaks.append(i / odf_rate)  # Convert to seconds
+
+    if len(peaks) < 3:
+        return None
+
+    # Calculate all possible inter-beat intervals
+    intervals = []
+    for i in range(len(peaks)):
+        for j in range(i + 1, min(i + 5, len(peaks))):  # Look ahead max 4 beats
+            interval = peaks[j] - peaks[i]
+            if 0.3 <= interval <= 1.0:  # Reasonable beat interval range
+                intervals.append(interval)
+
+    if not intervals:
+        return None
+
+    # Create histogram of intervals
+    hist, bin_edges = np.histogram(intervals, bins=30, range=(0.3, 1.0))
+
+    # Find most common interval
+    best_bin = np.argmax(hist)
+    best_interval = (bin_edges[best_bin] + bin_edges[best_bin + 1]) / 2
+
+    # Convert to BPM
+    tempo = 60.0 / best_interval
+
+    return [tempo]
 
 
 def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
