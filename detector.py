@@ -298,15 +298,15 @@ def detect_tempo(sample_rate, signal, fps, spect, magspect, melspect,
 
     if tempo_from_onsets is not None:
         weighted_tempos.extend(tempo_from_onsets)
-        weights.extend([0.8] * len(tempo_from_onsets))  # 40% weight for onset-based
+        weights.extend([0.9] * len(tempo_from_onsets))  # 40% weight for onset-based
 
     if tempo_from_autocorr is not None:
         weighted_tempos.extend(tempo_from_autocorr)
-        weights.extend([0.1] * len(tempo_from_autocorr))  # 35% weight for autocorr
+        weights.extend([0.05] * len(tempo_from_autocorr))  # 35% weight for autocorr
 
     if tempo_from_histogram is not None:
         weighted_tempos.extend(tempo_from_histogram)
-        weights.extend([0.1] * len(tempo_from_histogram))  # 25% weight for histogram
+        weights.extend([0.05] * len(tempo_from_histogram))  # 25% weight for histogram
 
     # Example: weighted_tempos = [125.3, 124.8, 126.1], weights = [0.4, 0.35, 0.25]
     # Weighted average: (125.3*0.4 + 124.8*0.35 + 126.1*0.25) = 125.225
