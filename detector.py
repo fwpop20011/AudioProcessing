@@ -489,7 +489,7 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
         t += beat_interval
 
     beat_times = []
-    search_window = 0.2
+    search_window = 0.17
 
     for raw_beat in raw_beats:
         center = int(raw_beat*odf_rate)
