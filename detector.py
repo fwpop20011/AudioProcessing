@@ -184,11 +184,21 @@ def onset_detection_function(sample_rate, signal, fps, spect, magspect,
 
     min_length = min(len(odf) for odf in odfs.values())
 
+    # Percussive component detection (good for drums/beats)
+    if signal is not None:
+        percussive = librosa.effects.percussive(signal, margin=8.0)
+        perc_spect = librosa.stft(percussive, n_fft=2048, hop_length=sample_rate//fps, window='hann')
+        perc_mag = np.abs(perc_spect)
+        odfs['percussive_flux'] = spectral_flux(perc_mag)
+
+    min_length = min(len(odf) for odf in odfs.values())
+
     weights = {
         'flux_mel': 0.3,  # Mel-based spectral flux
         'flux_mag': 0.3,  # Mag-based spectral flux
         'hfc': 0.3, # High-frequency content
-        'phase_dev': 0.3 # Percussive component flux
+        'phase_dev': 0.3, # Percussive deviation
+        'percussive_flux': 0.2 # Percussive component flux
     }
 
     available_weights = {k: weights[k] for k in odfs.keys()}
