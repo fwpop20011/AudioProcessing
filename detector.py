@@ -254,7 +254,53 @@ def detect_beats(sample_rate, signal, fps, spect, magspect, melspect,
     # it returns every 10th onset as a beat.
     # this is not a useful solution at all, just a placeholder.
     # TODO for beats
-    return onsets[::10]
+    if len(tempo) == 0:
+        return[]
+
+    bpm = tempo[0]
+    beat_interval = 60.0 / bpm
+
+    start_time = onsets[0] if len(onsets) > 0 else 0
+    end_time = len(signal) / sample_rate
+
+    raw_beats = []
+    t = start_time
+    while t < end_time:
+        raw_beats.append(t)
+        t += beat_interval
+
+    beat_times = []
+    search_window = 0.07
+
+    for raw_beat in raw_beats:
+        center = int(raw_beat*odf_rate)
+        window = int(search_window*odf_rate)
+
+        start = max(0, center - window)
+        end = min(len(odf), center + window + 1)
+
+        if end <= start:
+            beat_times.append(raw_beat)
+            continue
+
+        local_odf = odf[start:end]
+        if len(local_odf) == 0:
+            beat_times.append(raw_beat)
+            continue
+
+        peak_offset = np.argmax(local_odf)
+        snapped_index = start + peak_offset
+        snapped_time = snapped_index/odf_rate
+
+        if abs(snapped_time - raw_beat) <= search_window:
+            beat_times.append(snapped_time)
+        else:
+            beat_times.append(raw_beat)
+
+
+
+
+    return np.array(beat_times)
 
 
 def main():
